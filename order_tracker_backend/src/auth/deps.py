@@ -20,11 +20,12 @@ def _forbidden(detail: str = "Not authorized") -> HTTPException:
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
 
+# PUBLIC_INTERFACE
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """Resolve the current user from Bearer token."""
+    """Resolve the current user from a Bearer JWT token."""
     if credentials is None or not credentials.credentials:
         raise _unauthorized()
 
@@ -44,8 +45,9 @@ def get_current_user(
     return user
 
 
+# PUBLIC_INTERFACE
 def require_admin(user: User = Depends(get_current_user)) -> User:
-    """Require the current user to be an admin."""
+    """Require the current user to have the admin role."""
     if user.role != UserRole.admin:
         raise _forbidden("Admin role required")
     return user

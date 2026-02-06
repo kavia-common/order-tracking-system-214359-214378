@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from src.auth.deps import get_current_user
+from src.auth.deps import get_current_user, require_admin
 from src.auth.security import create_access_token, hash_password, verify_password
 from src.db.models import NotificationPreference, NotificationChannel, User, UserRole
 from src.db.session import get_db
@@ -59,4 +59,38 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     description="Returns the authenticated user's public profile.",
 )
 def me(user: User = Depends(get_current_user)) -> UserPublic:
+    return UserPublic(id=user.id, email=user.email, role=user.role, created_at=user.created_at)
+
+
+@router.post(
+    "/users",
+    response_model=UserPublic,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a user (admin only)",
+    description="Admin-only endpoint to create a user with an explicit role and default notification preferences.",
+)
+def create_user(
+    payload: SignupRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+) -> UserPublic:
+    existing = db.scalar(select(User).where(User.email == payload.email))
+    if existing:
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    role = payload.role or UserRole.customer
+    user = User(email=payload.email, password_hash=hash_password(payload.password), role=role)
+    db.add(user)
+    db.flush()
+
+    # Default notification preferences
+    pref = NotificationPreference(
+        user_id=user.id,
+        enabled=True,
+        channel=NotificationChannel.email,
+        email=user.email,
+    )
+    db.add(pref)
+    db.flush()
+
     return UserPublic(id=user.id, email=user.email, role=user.role, created_at=user.created_at)

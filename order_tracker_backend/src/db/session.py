@@ -14,25 +14,31 @@ def _build_sqlalchemy_url() -> str:
     """
     Build SQLAlchemy database URL from environment variables.
 
-    Uses POSTGRES_URL if provided (expected to be a full DSN).
-    Otherwise, falls back to composing from POSTGRES_* pieces.
+    Resolution order:
+    1) If POSTGRES_URL is set and looks like a full DSN (starts with postgresql:// or postgres://),
+       use it as-is.
+    2) If POSTGRES_URL is set but is just a hostname/service name (common in container setups),
+       compose a DSN from POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB/POSTGRES_PORT + host.
+    3) Otherwise, compose from POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB/POSTGRES_PORT and assume host=localhost.
 
     Raises:
         RuntimeError: if insufficient DB configuration exists.
     """
     settings = get_settings()
+
     if settings.postgres_url:
-        # Expect e.g. postgresql://user:pass@host:port/db
-        return settings.postgres_url
+        # Full DSN path (preferred)
+        if settings.postgres_url.startswith("postgresql://") or settings.postgres_url.startswith("postgres://"):
+            return settings.postgres_url
 
     # Compose from pieces
     if not (settings.postgres_user and settings.postgres_password and settings.postgres_db and settings.postgres_port):
         raise RuntimeError(
-            "Database configuration missing. Set POSTGRES_URL or POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB/POSTGRES_PORT."
+            "Database configuration missing. Set POSTGRES_URL (DSN or host) or POSTGRES_USER/POSTGRES_PASSWORD/POSTGRES_DB/POSTGRES_PORT."
         )
 
-    # Host is typically embedded in POSTGRES_URL; if only pieces exist, assume localhost
-    host = "localhost"
+    # If POSTGRES_URL is present but not a DSN, treat it as host (service name).
+    host = settings.postgres_url or "localhost"
     return f"postgresql+psycopg://{settings.postgres_user}:{settings.postgres_password}@{host}:{settings.postgres_port}/{settings.postgres_db}"
 
 

@@ -57,14 +57,19 @@ def create_order(
 ) -> OrderResponse:
     order = Order(order_number=payload.order_number, user_id=user_id, title=payload.title, description=payload.description)
     db.add(order)
-    db.flush()
-
-    history = OrderStatusHistory(order_id=order.id, old_status=None, new_status=order.current_status, changed_by_user_id=None)
-    db.add(history)
     try:
         db.flush()
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Order number already exists")
+
+    history = OrderStatusHistory(
+        order_id=order.id,
+        old_status=None,
+        new_status=order.current_status,
+        changed_by_user_id=None,
+    )
+    db.add(history)
+    db.flush()
 
     return _order_to_response(order)
 
@@ -87,7 +92,11 @@ def get_order(
     if user.role != UserRole.admin and order.user_id != user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this order")
 
-    history = db.scalars(select(OrderStatusHistory).where(OrderStatusHistory.order_id == order.id)).all()
+    history = db.scalars(
+        select(OrderStatusHistory)
+        .where(OrderStatusHistory.order_id == order.id)
+        .order_by(OrderStatusHistory.changed_at.asc(), OrderStatusHistory.id.asc())
+    ).all()
     return OrderDetailResponse(**_order_to_response(order).model_dump(), history=[_history_item(h) for h in history])
 
 
@@ -210,5 +219,9 @@ def update_status(
     db.add(history)
     db.flush()
 
-    history_items = db.scalars(select(OrderStatusHistory).where(OrderStatusHistory.order_id == order.id)).all()
+    history_items = db.scalars(
+        select(OrderStatusHistory)
+        .where(OrderStatusHistory.order_id == order.id)
+        .order_by(OrderStatusHistory.changed_at.asc(), OrderStatusHistory.id.asc())
+    ).all()
     return OrderDetailResponse(**_order_to_response(order).model_dump(), history=[_history_item(h) for h in history_items])

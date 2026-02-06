@@ -11,22 +11,33 @@ from src.core.config import get_settings
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+# PUBLIC_INTERFACE
 def hash_password(password: str) -> str:
-    """Hash password with bcrypt."""
+    """Hash a plaintext password using bcrypt."""
     return pwd_context.hash(password)
 
 
+# PUBLIC_INTERFACE
 def verify_password(password: str, password_hash: str) -> bool:
-    """Verify password against bcrypt hash."""
+    """Verify a plaintext password against its bcrypt hash."""
     return pwd_context.verify(password, password_hash)
 
 
+# PUBLIC_INTERFACE
 def create_access_token(*, subject: str, role: str, expires_minutes: Optional[int] = None) -> str:
     """
     Create a signed JWT access token.
 
-    subject: user id as string
-    role: 'customer' or 'admin'
+    Args:
+        subject: User id as string.
+        role: 'customer' or 'admin'.
+        expires_minutes: Optional override for token expiration time.
+
+    Returns:
+        Encoded JWT token string.
+
+    Raises:
+        RuntimeError: If JWT_SECRET is not configured.
     """
     settings = get_settings()
     if not settings.jwt_secret:
@@ -45,8 +56,18 @@ def create_access_token(*, subject: str, role: str, expires_minutes: Optional[in
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 
+# PUBLIC_INTERFACE
 def decode_token(token: str) -> Dict[str, Any]:
-    """Decode and validate a JWT token."""
+    """
+    Decode and validate a JWT token.
+
+    Returns:
+        The decoded JWT payload.
+
+    Raises:
+        RuntimeError: If JWT_SECRET is not configured.
+        jwt.InvalidTokenError: If the token is invalid/expired/claims mismatch.
+    """
     settings = get_settings()
     if not settings.jwt_secret:
         raise RuntimeError("JWT_SECRET is not set; cannot validate tokens.")
